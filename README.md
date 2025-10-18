@@ -12,11 +12,14 @@ Python工具库，提供配置管理、日志记录、数据库操作等通用�
 
 ## 安装
 
-### 从源码安装
+### 从源码安装，安装以后可直接修改源码，立即生效
 
 ```bash
-# 克隆仓库
-git clone https://github.com/your-username/py-utility.git
+# 克隆仓库，如果当前开发项目采用venv虚拟环境，请先启动虚拟环境，这样才是安装到当前项目虚拟环境
+# 启动虚拟环境，如果没有使用虚拟环境，则跳过
+python3 -m venv venv
+
+git clone https://github.com/tomcatyang/py-utility.git
 cd py-utility
 
 # 安装依赖
@@ -26,24 +29,98 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-### 开发模式安装
-
-```bash
-# 安装开发依赖
-pip install -e ".[dev]"
-
-# 运行测试
-pytest
-
-# 代码格式化
-black src/
-isort src/
-
-# 类型检查
-mypy src/
-```
 
 ## 快速开始
+
+## 配置说明
+
+### 配置文件
+
+库会在**当前工作目录**中查找配置文件：
+
+1. **环境特定配置文件**: `.env.{环境名}` (如 `.env.dev`, `.env.prod`)
+2. **基础配置文件**: `.env`
+
+#### 配置文件示例
+
+```bash
+# .env.dev (开发环境)
+# 环境标识 (dev/test/prod)
+ENV=dev
+
+# 数据库配置
+DB_HOST=111.230.41.108
+DB_PORT=3006
+DB_USER=root
+DB_PASSWORD=1qetADGzcb
+DB_NAME=option_trade_dev
+
+# Redis配置
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# 日志配置
+# dev: DEBUG, test: INFO, prod: WARNING
+LOG_LEVEL=DEBUG
+LOG_FILE=logs/app_dev.log
+
+# .env.prod (生产环境)
+ENV=prod
+# 环境标识 (dev/test/prod)
+ENV=dev
+
+# 数据库配置
+DB_HOST=111.230.41.108
+DB_PORT=3006
+DB_USER=root
+DB_PASSWORD=1qetADGzcb
+DB_NAME=option_trade_dev
+
+# Redis配置
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# 日志配置
+# dev: DEBUG, test: INFO, prod: WARNING
+LOG_LEVEL=INFO
+LOG_FILE=logs/app_dev.log
+```
+
+#### 环境变量
+
+也可以通过环境变量直接配置：
+
+```bash
+# 数据库配置
+export DB_HOST=localhost
+export DB_PORT=3306
+export DB_USER=root
+export DB_PASSWORD=password
+export DB_NAME=my_database
+
+# 日志配置
+export LOG_LEVEL=INFO
+export LOG_FILE=logs/app.log
+
+# Redis配置
+export REDIS_HOST=localhost
+export REDIS_PORT=6379
+export REDIS_PASSWORD=redis_password
+export REDIS_DB=0
+
+# 其他配置可以通过项目扩展
+# 例如：API配置、缓存配置等
+```
+
+#### 配置文件查找规则
+
+1. 库会在**当前工作目录**查找配置文件
+2. 如果未找到配置文件，会显示警告信息
+3. 配置文件优先级：环境变量 > 环境特定文件 > 基础文件
 
 ### 配置管理
 
@@ -131,51 +208,7 @@ with client.transaction() as cursor:
     cursor.execute("INSERT INTO logs (action) VALUES (%s)", ("create_user",))
 ```
 
-## 配置说明
 
-### 环境变量
-
-库支持通过环境变量进行配置：
-
-```bash
-# 数据库配置
-export DB_HOST=localhost
-export DB_PORT=3306
-export DB_USER=root
-export DB_PASSWORD=password
-export DB_NAME=my_database
-
-# 日志配置
-export LOG_LEVEL=INFO
-export LOG_FILE=logs/app.log
-
-# Redis配置
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-export REDIS_PASSWORD=redis_password
-export REDIS_DB=0
-
-# API配置
-export DATA_PROVIDER_API_KEY=your_api_key
-export BROKER_API_KEY=your_broker_key
-export BROKER_API_SECRET=your_broker_secret
-```
-
-### 配置文件
-
-支持 `.env` 文件配置：
-
-```bash
-# .env
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=password
-DB_NAME=my_database
-
-LOG_LEVEL=INFO
-LOG_FILE=logs/app.log
-```
 
 ## API 参考
 
@@ -208,9 +241,245 @@ settings.is_testing()
 - `DatabaseConfig`: 数据库配置
 - `RedisConfig`: Redis配置
 - `LoggingConfig`: 日志配置
-- `APIConfig`: API配置
-- `CacheConfig`: 缓存配置
-- `RateLimitConfig`: 频控配置
+
+> 其他配置（如API、缓存等）可以通过项目扩展实现
+
+#### 项目配置扩展
+
+由于 `py-utility` 只提供核心的数据库、Redis和日志配置，其他业务相关的配置可以通过项目扩展实现：
+
+```python
+# 在你的项目中创建扩展配置
+from py_utility import Settings, DatabaseConfig, RedisConfig, LoggingConfig
+from pydantic import BaseModel, Field
+from typing import Optional
+
+class APIConfig(BaseModel):
+    """API配置"""
+    data_provider_key: Optional[str] = Field(default=None)
+    data_provider_url: Optional[str] = Field(default=None)
+    broker_key: Optional[str] = Field(default=None)
+    broker_secret: Optional[str] = Field(default=None)
+
+class CacheConfig(BaseModel):
+    """缓存配置"""
+    ttl_spot: int = Field(default=300)
+    ttl_option: int = Field(default=60)
+    ttl_vix: int = Field(default=3600)
+
+class ExtendedSettings(Settings):
+    """扩展配置类"""
+    
+    # API配置
+    api_key: Optional[str] = Field(default=None, alias="API_KEY")
+    api_url: Optional[str] = Field(default=None, alias="API_URL")
+    
+    # 缓存配置
+    cache_ttl: int = Field(default=300, alias="CACHE_TTL")
+    
+    @property
+    def api(self) -> APIConfig:
+        """获取API配置"""
+        return APIConfig(
+            data_provider_key=self.api_key,
+            data_provider_url=self.api_url,
+            broker_key=self.api_key,
+            broker_secret=self.api_key
+        )
+    
+    @property
+    def cache(self) -> CacheConfig:
+        """获取缓存配置"""
+        return CacheConfig(
+            ttl_spot=self.cache_ttl,
+            ttl_option=self.cache_ttl,
+            ttl_vix=self.cache_ttl
+        )
+
+# 使用扩展配置
+settings = ExtendedSettings()
+print(f"API配置: {settings.api.data_provider_key}")
+print(f"缓存配置: {settings.cache.ttl_spot}")
+```
+
+#### 配置文件扩展
+
+在项目根目录创建 `.env` 文件，包含扩展配置：
+
+```bash
+# .env.dev
+# 基础配置
+ENV=dev
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=dev_password
+DB_NAME=option_trade_dev
+LOG_LEVEL=DEBUG
+LOG_FILE=logs/dev.log
+
+# 扩展配置
+API_KEY=your_api_key_here
+API_URL=https://api.example.com
+CACHE_TTL=300
+```
+
+#### 环境变量映射
+
+扩展配置通过环境变量映射到配置类：
+
+```python
+class ExtendedSettings(Settings):
+    """扩展配置类"""
+    
+    # 环境变量映射
+    api_key: Optional[str] = Field(default=None, alias="API_KEY")
+    api_url: Optional[str] = Field(default=None, alias="API_URL")
+    cache_ttl: int = Field(default=300, alias="CACHE_TTL")
+    
+    # 业务配置
+    business_name: str = Field(default="MyApp", alias="BUSINESS_NAME")
+    max_retries: int = Field(default=3, alias="MAX_RETRIES")
+    timeout: int = Field(default=30, alias="TIMEOUT")
+```
+
+对应的 `.env` 文件：
+
+```bash
+# .env.dev
+# 基础配置
+ENV=dev
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=dev_password
+DB_NAME=option_trade_dev
+LOG_LEVEL=DEBUG
+LOG_FILE=logs/dev.log
+
+# 扩展配置
+API_KEY=your_api_key_here
+API_URL=https://api.example.com
+CACHE_TTL=300
+BUSINESS_NAME=MyTradingApp
+MAX_RETRIES=5
+TIMEOUT=60
+```
+
+#### 多环境配置
+
+为不同环境创建不同的配置文件：
+
+```bash
+# .env.dev (开发环境)
+ENV=dev
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=dev_user
+DB_PASSWORD=dev_password
+DB_NAME=trading_dev
+LOG_LEVEL=DEBUG
+LOG_FILE=logs/dev.log
+API_KEY=dev_api_key
+API_URL=https://dev-api.example.com
+CACHE_TTL=60
+
+# .env.test (测试环境)
+ENV=test
+DB_HOST=test-db.example.com
+DB_PORT=3306
+DB_USER=test_user
+DB_PASSWORD=test_password
+DB_NAME=trading_test
+LOG_LEVEL=INFO
+LOG_FILE=logs/test.log
+API_KEY=test_api_key
+API_URL=https://test-api.example.com
+CACHE_TTL=120
+
+# .env.prod (生产环境)
+ENV=prod
+DB_HOST=prod-db.example.com
+DB_PORT=3306
+DB_USER=prod_user
+DB_PASSWORD=prod_password
+DB_NAME=trading_prod
+LOG_LEVEL=WARNING
+LOG_FILE=/var/log/trading/app.log
+API_KEY=prod_api_key
+API_URL=https://api.example.com
+CACHE_TTL=300
+```
+
+#### 配置验证
+
+扩展配置支持Pydantic的验证功能：
+
+```python
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional
+
+class ExtendedSettings(Settings):
+    """扩展配置类"""
+    
+    # 带验证的配置
+    api_key: Optional[str] = Field(default=None, alias="API_KEY")
+    api_url: Optional[str] = Field(default=None, alias="API_URL")
+    cache_ttl: int = Field(default=300, alias="CACHE_TTL", ge=1, le=3600)
+    max_retries: int = Field(default=3, alias="MAX_RETRIES", ge=0, le=10)
+    
+    @field_validator('api_url')
+    @classmethod
+    def validate_api_url(cls, v):
+        if v and not v.startswith(('http://', 'https://')):
+            raise ValueError('API_URL must start with http:// or https://')
+        return v
+    
+    @field_validator('cache_ttl')
+    @classmethod
+    def validate_cache_ttl(cls, v):
+        if v < 1 or v > 3600:
+            raise ValueError('CACHE_TTL must be between 1 and 3600 seconds')
+        return v
+```
+
+#### 使用示例
+
+```python
+# 在项目中使用扩展配置
+from py_utility import Settings
+from pydantic import BaseModel, Field
+from typing import Optional
+
+class ExtendedSettings(Settings):
+    """扩展配置类"""
+    
+    # API配置
+    api_key: Optional[str] = Field(default=None, alias="API_KEY")
+    api_url: Optional[str] = Field(default=None, alias="API_URL")
+    
+    # 缓存配置
+    cache_ttl: int = Field(default=300, alias="CACHE_TTL")
+    
+    # 业务配置
+    business_name: str = Field(default="MyApp", alias="BUSINESS_NAME")
+    max_retries: int = Field(default=3, alias="MAX_RETRIES")
+    
+    @property
+    def api_config(self):
+        """获取API配置"""
+        return {
+            "key": self.api_key,
+            "url": self.api_url,
+            "retries": self.max_retries
+        }
+
+# 使用配置
+settings = ExtendedSettings()
+print(f"业务名称: {settings.business_name}")
+print(f"API配置: {settings.api_config}")
+print(f"缓存TTL: {settings.cache_ttl}")
+```
 
 ### 日志管理
 

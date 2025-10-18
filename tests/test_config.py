@@ -11,9 +11,6 @@ from py_utility import (
     DatabaseConfig,
     RedisConfig,
     LoggingConfig,
-    APIConfig,
-    CacheConfig,
-    RateLimitConfig,
     get_settings,
     init_settings,
     reload_settings,
@@ -127,106 +124,72 @@ class TestSettings:
     def test_environment_detection(self):
         """测试环境检测"""
         # 开发环境
-        settings = Settings(env="dev")
-        assert settings.is_development() is True
-        assert settings.is_production() is False
-        assert settings.is_testing() is False
+        with patch.dict(os.environ, {"ENV": "dev"}):
+            settings = Settings()
+            assert settings.is_development() is True
+            assert settings.is_production() is False
+            assert settings.is_testing() is False
         
         # 生产环境
-        settings = Settings(env="prod")
-        assert settings.is_development() is False
-        assert settings.is_production() is True
-        assert settings.is_testing() is False
+        with patch.dict(os.environ, {"ENV": "prod"}):
+            settings = Settings()
+            assert settings.is_development() is False
+            assert settings.is_production() is True
+            assert settings.is_testing() is False
         
         # 测试环境
-        settings = Settings(env="test")
-        assert settings.is_development() is False
-        assert settings.is_production() is False
-        assert settings.is_testing() is True
+        with patch.dict(os.environ, {"ENV": "test"}):
+            settings = Settings()
+            assert settings.is_development() is False
+            assert settings.is_production() is False
+            assert settings.is_testing() is True
     
     def test_database_property(self):
         """测试数据库配置属性"""
-        settings = Settings(
-            db_host="test_host",
-            db_port=3307,
-            db_user="test_user",
-            db_password="test_password",
-            db_name="test_db"
-        )
-        db_config = settings.database
-        assert isinstance(db_config, DatabaseConfig)
-        assert db_config.host == "test_host"
-        assert db_config.port == 3307
-        assert db_config.user == "test_user"
-        assert db_config.password == "test_password"
-        assert db_config.name == "test_db"
+        with patch.dict(os.environ, {
+            "DB_HOST": "test_host",
+            "DB_PORT": "3307",
+            "DB_USER": "test_user",
+            "DB_PASSWORD": "test_password",
+            "DB_NAME": "test_db"
+        }):
+            settings = Settings()
+            db_config = settings.database
+            assert isinstance(db_config, DatabaseConfig)
+            assert db_config.host == "test_host"
+            assert db_config.port == 3307
+            assert db_config.user == "test_user"
+            assert db_config.password == "test_password"
+            assert db_config.name == "test_db"
     
     def test_redis_property(self):
         """测试Redis配置属性"""
-        settings = Settings(
-            redis_host="redis_host",
-            redis_port=6380,
-            redis_password="redis_password",
-            redis_db=1
-        )
-        redis_config = settings.redis
-        assert isinstance(redis_config, RedisConfig)
-        assert redis_config.host == "redis_host"
-        assert redis_config.port == 6380
-        assert redis_config.password == "redis_password"
-        assert redis_config.db == 1
+        with patch.dict(os.environ, {
+            "REDIS_HOST": "redis_host",
+            "REDIS_PORT": "6380",
+            "REDIS_PASSWORD": "redis_password",
+            "REDIS_DB": "1"
+        }):
+            settings = Settings()
+            redis_config = settings.redis
+            assert isinstance(redis_config, RedisConfig)
+            assert redis_config.host == "redis_host"
+            assert redis_config.port == 6380
+            assert redis_config.password == "redis_password"
+            assert redis_config.db == 1
     
     def test_logging_property(self):
         """测试日志配置属性"""
-        settings = Settings(
-            log_level="DEBUG",
-            log_file="test.log"
-        )
-        log_config = settings.logging
-        assert isinstance(log_config, LoggingConfig)
-        assert log_config.level == "DEBUG"
-        assert log_config.file == "test.log"
+        with patch.dict(os.environ, {
+            "LOG_LEVEL": "DEBUG",
+            "LOG_FILE": "test.log"
+        }):
+            settings = Settings()
+            log_config = settings.logging
+            assert isinstance(log_config, LoggingConfig)
+            assert log_config.level == "DEBUG"
+            assert log_config.file == "test.log"
     
-    def test_api_property(self):
-        """测试API配置属性"""
-        settings = Settings(
-            data_provider_api_key="api_key",
-            data_provider_base_url="https://api.example.com",
-            broker_api_key="broker_key",
-            broker_api_secret="broker_secret",
-            broker_base_url="https://broker.example.com"
-        )
-        api_config = settings.api
-        assert isinstance(api_config, APIConfig)
-        assert api_config.data_provider_key == "api_key"
-        assert api_config.data_provider_url == "https://api.example.com"
-        assert api_config.broker_key == "broker_key"
-        assert api_config.broker_secret == "broker_secret"
-        assert api_config.broker_url == "https://broker.example.com"
-    
-    def test_cache_property(self):
-        """测试缓存配置属性"""
-        settings = Settings(
-            cache_ttl_spot=600,
-            cache_ttl_option=120,
-            cache_ttl_vix=7200
-        )
-        cache_config = settings.cache
-        assert isinstance(cache_config, CacheConfig)
-        assert cache_config.ttl_spot == 600
-        assert cache_config.ttl_option == 120
-        assert cache_config.ttl_vix == 7200
-    
-    def test_rate_limit_property(self):
-        """测试频控配置属性"""
-        settings = Settings(
-            rate_limit_enabled=False,
-            rate_limit_calls_per_second=20
-        )
-        rate_limit_config = settings.rate_limit
-        assert isinstance(rate_limit_config, RateLimitConfig)
-        assert rate_limit_config.enabled is False
-        assert rate_limit_config.calls_per_second == 20
 
 
 class TestGlobalFunctions:

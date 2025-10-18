@@ -13,8 +13,8 @@ def run_tests():
     """运行测试"""
     print("开始运行 py-utility 测试...")
     
-    # 获取项目根目录
-    project_root = Path(__file__).parent
+    # 获取项目根目录（tests目录的父目录）
+    project_root = Path(__file__).parent.parent
     
     # 运行pytest
     try:

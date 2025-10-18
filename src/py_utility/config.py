@@ -60,26 +60,6 @@ class LoggingConfig(BaseModel):
         return v.upper()
 
 
-class APIConfig(BaseModel):
-    """API配置"""
-    data_provider_key: Optional[str] = Field(default=None)
-    data_provider_url: Optional[str] = Field(default=None)
-    broker_key: Optional[str] = Field(default=None)
-    broker_secret: Optional[str] = Field(default=None)
-    broker_url: Optional[str] = Field(default=None)
-
-
-class CacheConfig(BaseModel):
-    """缓存配置"""
-    ttl_spot: int = Field(default=300)  # 5分钟
-    ttl_option: int = Field(default=60)  # 1分钟
-    ttl_vix: int = Field(default=3600)  # 1小时
-
-
-class RateLimitConfig(BaseModel):
-    """频控配置"""
-    enabled: bool = Field(default=True)
-    calls_per_second: int = Field(default=10)
 
 
 class Settings(BaseSettings):
@@ -105,27 +85,12 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     log_file: Optional[str] = Field(default=None, alias="LOG_FILE")
     
-    # API配置
-    data_provider_api_key: Optional[str] = Field(default=None, alias="DATA_PROVIDER_API_KEY")
-    data_provider_base_url: Optional[str] = Field(default=None, alias="DATA_PROVIDER_BASE_URL")
-    broker_api_key: Optional[str] = Field(default=None, alias="BROKER_API_KEY")
-    broker_api_secret: Optional[str] = Field(default=None, alias="BROKER_API_SECRET")
-    broker_base_url: Optional[str] = Field(default=None, alias="BROKER_BASE_URL")
-    
-    # 缓存配置
-    cache_ttl_spot: int = Field(default=300, alias="CACHE_TTL_SPOT")
-    cache_ttl_option: int = Field(default=60, alias="CACHE_TTL_OPTION")
-    cache_ttl_vix: int = Field(default=3600, alias="CACHE_TTL_VIX")
-    
-    # 频控配置
-    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
-    rate_limit_calls_per_second: int = Field(default=10, alias="RATE_LIMIT_CALLS_PER_SECOND")
     
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": False,
-        "extra": "forbid"
+        "extra": "allow"
     }
     
     def __init__(self, **kwargs):
@@ -135,18 +100,34 @@ class Settings(BaseSettings):
     
     def _load_env_files(self):
         """加载环境特定的配置文件"""
-        project_root = Path(__file__).parent.parent.parent
+        # 固定在当前工作目录查找配置文件
+        config_dir = Path.cwd()
+        
+        # 检查配置文件是否存在
+        env = os.getenv('ENV', 'dev')
+        env_file = config_dir / f'.env.{env}'
+        base_env_file = config_dir / '.env'
+        
+        config_found = False
         
         # 加载环境特定的.env文件
-        env = os.getenv('ENV', 'dev')
-        env_file = project_root / f'.env.{env}'
         if env_file.exists():
             load_dotenv(env_file, override=False)
+            config_found = True
         
         # 加载基础.env文件
-        base_env_file = project_root / '.env'
         if base_env_file.exists():
             load_dotenv(base_env_file, override=False)
+            config_found = True
+        
+        # 如果没有找到配置文件，提示错误
+        if not config_found:
+            print(f"⚠️  警告: 未找到配置文件，请在当前工作目录创建配置文件")
+            print(f"   当前工作目录: {config_dir}")
+            print(f"   请在当前工作目录创建配置文件")
+            print(f"   示例: {config_dir}/.env.dev")
+            print(f"   示例: {config_dir}/.env.prod")
+            print(f"   示例: {config_dir}/.env")
     
     @property
     def database(self) -> DatabaseConfig:
@@ -177,33 +158,6 @@ class Settings(BaseSettings):
             file=self.log_file
         )
     
-    @property
-    def api(self) -> APIConfig:
-        """获取API配置"""
-        return APIConfig(
-            data_provider_key=self.data_provider_api_key,
-            data_provider_url=self.data_provider_base_url,
-            broker_key=self.broker_api_key,
-            broker_secret=self.broker_api_secret,
-            broker_url=self.broker_base_url
-        )
-    
-    @property
-    def cache(self) -> CacheConfig:
-        """获取缓存配置"""
-        return CacheConfig(
-            ttl_spot=self.cache_ttl_spot,
-            ttl_option=self.cache_ttl_option,
-            ttl_vix=self.cache_ttl_vix
-        )
-    
-    @property
-    def rate_limit(self) -> RateLimitConfig:
-        """获取频控配置"""
-        return RateLimitConfig(
-            enabled=self.rate_limit_enabled,
-            calls_per_second=self.rate_limit_calls_per_second
-        )
     
     def is_production(self) -> bool:
         """判断是否为生产环境"""
