@@ -5,12 +5,14 @@
 支持结构化日志输出（JSON格式）
 根据环境自动设置日志级别
 支持输出到控制台和文件
+日志文件按日期自动分割（每天生成一个新文件）
 """
 
 import sys
 import logging
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 import structlog
 from structlog.typing import FilteringBoundLogger
 
@@ -30,7 +32,8 @@ class LoggerManager:
         
         Args:
             log_level: 日志级别（DEBUG/INFO/WARNING/ERROR/CRITICAL）
-            log_file: 日志文件路径
+            log_file: 日志文件路径，会自动添加日期后缀
+                     例如：logs/app.log -> logs/app_2025-01-15.log
         """
         if cls._initialized:
             return
@@ -39,11 +42,6 @@ class LoggerManager:
         config = get_config()
         log_level = log_level or config.logging.level
         log_file = log_file or config.logging.file or 'logs/app.log'
-        
-        # 确保日志目录存在
-        if log_file:
-            log_path = Path(log_file)
-            log_path.parent.mkdir(parents=True, exist_ok=True)
         
         # 设置日志级别
         level = getattr(logging, log_level.upper(), logging.INFO)
@@ -61,9 +59,19 @@ class LoggerManager:
         console_handler.setFormatter(logging.Formatter('%(message)s'))
         root_logger.addHandler(console_handler)
         
-        # 添加文件handler
+        # 添加文件handler（按日期分割）
         if log_file:
-            file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='a')
+            # 生成带日期的日志文件名
+            log_path = Path(log_file)
+            log_dir = log_path.parent
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 文件名格式：app_2025-01-15.log
+            log_stem = log_path.stem
+            date_suffix = datetime.now().strftime('%Y-%m-%d')
+            dated_log_file = log_dir / f"{log_stem}_{date_suffix}.log"
+            
+            file_handler = logging.FileHandler(dated_log_file, encoding='utf-8', mode='a')
             file_handler.setLevel(level)
             file_handler.setFormatter(logging.Formatter('%(message)s'))
             root_logger.addHandler(file_handler)
@@ -163,7 +171,8 @@ def init_logging(log_level: Optional[str] = None, log_file: Optional[str] = None
     
     Args:
         log_level: 日志级别
-        log_file: 日志文件路径
+        log_file: 日志文件路径，会自动添加日期后缀
+                 例如：logs/app.log -> logs/app_2025-01-15.log
     """
     LoggerManager.init_logging(log_level, log_file)
 
@@ -218,7 +227,11 @@ def exception(msg: str, **kwargs) -> None:
 
 
 if __name__ == "__main__":
+    # 初始化日志系统，日志文件会按日期自动分割
+    # 例如：logs/info.log -> logs/info_2025-01-15.log
     init_logging(log_level='INFO', log_file='logs/info.log')
     logger = get_logger(__name__)
-    logger.debug("message", key="value")
+    
+    logger.info("这是信息日志", key="value")
+    logger.debug("这是调试日志（不会输出）", debug_key="debug_value")
 
