@@ -10,6 +10,7 @@
 
 import sys
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -61,19 +62,50 @@ class LoggerManager:
         
         # 添加文件handler（按日期分割）
         if log_file:
-            # 生成带日期的日志文件名
             log_path = Path(log_file)
             log_dir = log_path.parent
             log_dir.mkdir(parents=True, exist_ok=True)
             
-            # 文件名格式：app_2025-01-15.log
+            # 使用基础文件名（不包含日期），TimedRotatingFileHandler会自动添加日期后缀
             log_stem = log_path.stem
-            date_suffix = datetime.now().strftime('%Y-%m-%d')
-            dated_log_file = log_dir / f"{log_stem}_{date_suffix}.log"
+            base_log_file = log_dir / f"{log_stem}.log"
             
-            file_handler = logging.FileHandler(dated_log_file, encoding='utf-8', mode='a')
+            # 使用TimedRotatingFileHandler实现按日期自动轮转
+            # when='midnight': 每天午夜自动切换
+            # interval=1: 每1天轮转一次
+            # backupCount=0: 保留所有旧文件
+            # suffix='%Y-%m-%d': 日期后缀格式
+            file_handler = TimedRotatingFileHandler(
+                str(base_log_file),
+                when='midnight',
+                interval=1,
+                backupCount=0,  # 保留所有旧文件
+                encoding='utf-8',
+                delay=False,
+                suffix='%Y-%m-%d'  # 日期后缀格式
+            )
             file_handler.setLevel(level)
             file_handler.setFormatter(logging.Formatter('%(message)s'))
+            
+            # 自定义文件命名函数，将格式从 app.log.2025-11-24 改为 app_2025-11-24.log
+            def dated_namer(name):
+                """自定义文件命名函数，确保文件名格式为 app_YYYY-MM-DD.log"""
+                name_path = Path(name)
+                base_name = name_path.name
+                parent_dir = name_path.parent
+                
+                # 提取日期后缀（格式：app.log.2025-11-24）
+                if '.log.' in base_name:
+                    parts = base_name.split('.log.')
+                    if len(parts) == 2:
+                        log_prefix = parts[0]  # app
+                        date_part = parts[1]    # 2025-11-24
+                        return str(parent_dir / f"{log_prefix}_{date_part}.log")
+                
+                # 如果格式不匹配，返回原文件名
+                return name
+            
+            file_handler.namer = dated_namer
             root_logger.addHandler(file_handler)
         
         # 自定义文本格式处理器
@@ -81,16 +113,35 @@ class LoggerManager:
             """
             自定义文本格式渲染器：time level tag logtext
             """
-            from datetime import datetime
+            from datetime import datetime, timezone
             
-            # 格式化时间戳为 YYYY/MM/DD HH:MM:SS.mmm
-            timestamp = event_dict.pop('timestamp', '')
-            if timestamp:
+            # 格式化时间戳为 YYYY/MM/DD HH:MM:SS.mmm（本地时间）
+            timestamp_str = event_dict.pop('timestamp', '')
+            if timestamp_str:
                 try:
-                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    # 处理ISO格式时间戳（通常structlog生成的是UTC时间）
+                    # 先将Z替换为+00:00以便fromisoformat能正确解析
+                    if timestamp_str.endswith('Z'):
+                        timestamp_str = timestamp_str.replace('Z', '+00:00')
+                    
+                    # 解析ISO格式时间戳
+                    dt = datetime.fromisoformat(timestamp_str)
+                    
+                    # 如果时间戳没有时区信息，假设为UTC
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    
+                    # 转换为本地时间
+                    dt = dt.astimezone()
+                    
+                    # 格式化为 YYYY/MM/DD HH:MM:SS.mmm（本地时间）
                     timestamp = dt.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]  # 保留3位毫秒
-                except:
-                    pass
+                except Exception:
+                    # 解析失败时使用当前本地时间
+                    timestamp = datetime.now().strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+            else:
+                # 没有时间戳时使用当前本地时间
+                timestamp = datetime.now().strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
             
             level = event_dict.pop('level', 'INFO').upper()
             logger_name = event_dict.pop('logger', 'root')
