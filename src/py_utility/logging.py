@@ -5,11 +5,12 @@
 支持结构化日志输出（JSON格式）
 根据环境自动设置日志级别
 支持输出到控制台和文件
-日志文件按日期自动分割（每天生成一个新文件）
+日志文件按日期自动分割（每天午夜自动轮转）
 """
 
 import sys
 import logging
+import time
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Optional
@@ -33,8 +34,9 @@ class LoggerManager:
         
         Args:
             log_level: 日志级别（DEBUG/INFO/WARNING/ERROR/CRITICAL）
-            log_file: 日志文件路径，会自动添加日期后缀
-                     例如：logs/app.log -> logs/app_2025-01-15.log
+            log_file: 日志文件路径（例如：logs/app.log）
+                     程序启动时会使用当前日期创建日志文件（例如：app_2025-12-03.log）
+                     每天午夜轮转时会自动切换到新日期的文件（例如：app_2025-12-04.log）
         """
         if cls._initialized:
             return
@@ -66,69 +68,56 @@ class LoggerManager:
             log_dir = log_path.parent
             log_dir.mkdir(parents=True, exist_ok=True)
             
-            log_stem = log_path.stem
-            # 使用当前日期生成初始文件名：app_2025-11-23.log
+            log_stem = log_path.stem  # 例如：app
+            log_suffix = log_path.suffix  # 例如：.log
+            
+            # 使用当前日期生成文件名：app_2025-12-03.log
             current_date = datetime.now().strftime('%Y-%m-%d')
-            initial_log_file = log_dir / f"{log_stem}_{current_date}.log"
+            dated_log_file = log_dir / f"{log_stem}_{current_date}{log_suffix}"
             
             # 使用TimedRotatingFileHandler实现按日期自动轮转
-            # 直接使用带日期的文件名作为基础文件名
             # when='midnight': 每天午夜自动切换
             # interval=1: 每1天轮转一次
             # backupCount=0: 保留所有旧文件
             file_handler = TimedRotatingFileHandler(
-                str(initial_log_file),
+                str(dated_log_file),
                 when='midnight',
                 interval=1,
                 backupCount=0,  # 保留所有旧文件
                 encoding='utf-8',
                 delay=False
             )
-            # 设置日期后缀格式
-            file_handler.suffix = '%Y-%m-%d'
+            
+            # 重写 doRollover 方法，在轮转时直接切换到新日期的文件
+            original_doRollover = file_handler.doRollover
+            
+            def custom_doRollover():
+                """自定义轮转：直接切换到新日期的文件，不重命名旧文件"""
+                if file_handler.stream:
+                    file_handler.stream.close()
+                    file_handler.stream = None
+                
+                # 计算新的日期文件名
+                new_date = datetime.now().strftime('%Y-%m-%d')
+                new_log_file = log_dir / f"{log_stem}_{new_date}{log_suffix}"
+                
+                # 更新 baseFilename 为新的日期文件
+                file_handler.baseFilename = str(new_log_file)
+                
+                # 打开新文件
+                file_handler.stream = file_handler._open()
+                
+                # 计算下次轮转时间
+                currentTime = int(time.time())
+                newRolloverAt = file_handler.computeRollover(currentTime)
+                while newRolloverAt <= currentTime:
+                    newRolloverAt = newRolloverAt + file_handler.interval
+                file_handler.rolloverAt = newRolloverAt
+            
+            file_handler.doRollover = custom_doRollover
+            
             file_handler.setLevel(level)
             file_handler.setFormatter(logging.Formatter('%(message)s'))
-            
-            # 自定义文件命名函数，将轮转后的格式改为 app_YYYY-MM-DD.log
-            # 轮转时，TimedRotatingFileHandler会生成：app_2025-11-23.log.2025-11-24
-            # 我们需要将其转换为：app_2025-11-24.log
-            def dated_namer(name):
-                """自定义文件命名函数，确保文件名格式为 app_YYYY-MM-DD.log"""
-                name_path = Path(name)
-                base_name = name_path.name
-                parent_dir = name_path.parent
-                
-                # 提取日期后缀（格式：app_2025-11-23.log.2025-11-24）
-                if '.log.' in base_name:
-                    parts = base_name.split('.log.')
-                    if len(parts) == 2:
-                        # 提取新日期（后缀部分）
-                        date_part = parts[1]  # 2025-11-24（轮转后的新日期）
-                        return str(parent_dir / f"{log_stem}_{date_part}.log")
-                
-                # 如果格式不匹配，返回原文件名
-                return name
-            
-            file_handler.namer = dated_namer
-            
-            # 重写rotation_filename方法，确保轮转后创建的文件也包含日期
-            original_rotation_filename = file_handler.rotation_filename
-            
-            def rotation_filename_with_date(default_name):
-                """自定义轮转文件名生成，确保新文件包含日期"""
-                # 默认会生成 app_2025-11-23.log.2025-11-24
-                # 但我们需要创建 app_2025-11-24.log
-                if '.log.' in default_name:
-                    # 提取新日期
-                    parts = default_name.split('.log.')
-                    if len(parts) == 2:
-                        date_part = parts[1]
-                        new_file = log_dir / f"{log_stem}_{date_part}.log"
-                        return str(new_file)
-                return default_name
-            
-            # 替换rotation_filename方法
-            file_handler.rotation_filename = rotation_filename_with_date
             
             root_logger.addHandler(file_handler)
         
@@ -246,8 +235,8 @@ def init_logging(log_level: Optional[str] = None, log_file: Optional[str] = None
     
     Args:
         log_level: 日志级别
-        log_file: 日志文件路径，会自动添加日期后缀
-                 例如：logs/app.log -> logs/app_2025-01-15.log
+        log_file: 日志文件路径（例如：logs/app.log）
+                 程序启动时会使用当前日期创建日志文件，每天午夜自动切换到新日期的文件
     """
     LoggerManager.init_logging(log_level, log_file)
 
@@ -302,8 +291,9 @@ def exception(msg: str, **kwargs) -> None:
 
 
 if __name__ == "__main__":
-    # 初始化日志系统，日志文件会按日期自动分割
-    # 例如：logs/info.log -> logs/info_2025-01-15.log
+    # 初始化日志系统，日志文件会使用当前日期
+    # 例如：logs/info.log -> logs/info_2025-12-03.log
+    # 每天午夜会自动切换到新日期的文件
     init_logging(log_level='INFO', log_file='logs/info.log')
     logger = get_logger(__name__)
     
