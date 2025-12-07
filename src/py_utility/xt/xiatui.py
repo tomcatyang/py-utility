@@ -72,12 +72,13 @@ class XiaTuiNotifier:
         """
         return self._token
     
-    def send(self, text: str, desp: str = "") -> bool:
+    def send(self, text: str, desp: str = "", wait_result: bool = False) -> bool:
         """发送推送消息（异步，加入队列）
         
         Args:
             text: 消息标题
             desp: 消息内容，最大支持64KB
+            wait_result: 是否等待发送结果，默认不等待
             
         Returns:
             bool: 发送是否成功
@@ -99,11 +100,14 @@ class XiaTuiNotifier:
         message = _PushMessage(text=text, desp=desp, future=result_queue)
         self._message_queue.put(message)
         
-        # 等待发送结果（设置超时避免永久阻塞）
-        try:
-            return result_queue.get(timeout=300)  # 5分钟超时
-        except queue.Empty:
-            raise RuntimeError("推送消息超时")
+        if wait_result:
+            # 等待发送结果（设置超时避免永久阻塞）
+            try:
+                return result_queue.get(timeout=60)  # 5分钟超时
+            except queue.Empty:
+                raise RuntimeError("推送消息超时")
+        else:
+            return True
     
     def _send_message(self, text: str, desp: str) -> bool:
         """实际发送推送消息（内部方法）
